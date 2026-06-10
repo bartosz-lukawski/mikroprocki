@@ -1,0 +1,38 @@
+#include <avr/io.h>
+#include <util/delay.h>
+
+// Inicjalizacja magistrali 1-Wire (Reset i wykrywanie Presence Pulse)
+uint8_t onewire_reset(void) {
+    uint8_t presence = 0;
+    
+    DDRB |= (1 << DDB4);       // Pin D12 jako wyjście
+    PORTB &= ~(1 << PORTB4);   // Ściągnij linię do GND
+    _delay_us(480);            // Wymagane opóźnienie min. 480 us
+    
+    PORTB |= (1 << PORTB4);    // Zwolnij linię (podciąganie pull-up)
+    DDRB &= ~(1 << DDB4);      // Pin D12 jako wejście
+    _delay_us(70);             // Czekaj, aż DS18B20 odpowie stanem niskim
+    
+    if (!(PINB & (1 << PINB4))) {
+        presence = 1;          // Czujnik odpowiedział obecnością
+    }
+    
+    _delay_us(410);            // Dopełnienie okna czasowego (time slot)
+    return presence;
+}
+
+int main(void) {
+    // Porty wyjściowe dla diod diagnostycznych na płytce eduTAR (np. sygnalizacja błędu)
+    DDRB |= (1 << DDB5); // Wbudowana dioda na D13 jako wskaźnik obecności czujnika
+
+    while (1) {
+        if (onewire_reset()) {
+            PORTB |= (1 << PORTB4);  // Zapal diodę - czujnik podłączony i odpowiada
+        } else {
+            PORTB &= ~(1 << PORTB4); // Zgaś diodę - brak kontaktu z DS18B20
+        }
+        
+        _delay_ms(1000); // Testuj magistralę raz na sekundę
+    }
+    return 0;
+}
