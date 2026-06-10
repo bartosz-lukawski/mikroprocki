@@ -1,0 +1,99 @@
+#include <avr/io.h>
+#include <util/delay.h>
+#include <stdlib.h>
+
+// --- UART (Zadanie 1) ---
+void uart_init(unsigned int baudrate) {
+    unsigned int ubrr = F_CPU / 16 / baudrate - 1;
+    UBRR0H = (unsigned char)(ubrr >> 8);
+    UBRR0L = (unsigned char)ubrr;
+    UCSR0B = (1 << RXEN0) | (1 << TXEN0);
+    UCSR0C = (1 << USBS0) | (3 << UCSZ00);
+}
+
+void uart_print_string(const char* str) {
+    for (int i = 0; str[i] != '\0'; i++) {
+        while (!(UCSR0A & (1 << UDRE0)));
+        UDR0 = str[i];
+    }
+}
+
+void uart_print_float(float value) {
+    char buffer[10];
+    dtostrf(value, 4, 2, buffer);
+    uart_print_string(buffer);
+}
+
+// --- 1-Wire / DS18B20 (Zadanie 2) ---
+uint8_t onewire_reset(void) {
+    uint8_t presence = 0;
+    DDRB |= (1 << DDB4);       // Pin D12 jako wyjście
+    PORTB &= ~(1 << PORTB4);   // Stan niski
+    _delay_us(480);
+    
+    PORTB |= (1 << PORTB4);    // Zwolnij linię
+    DDRB &= ~(1 << DDB4);      // Pin D12 jako wejście
+    _delay_us(70);
+    
+    if (!(PINB & (1 << PINB4))) {
+        presence = 1;          // Wykryto obecność czujnika
+    }
+    _delay_us(410);
+    return presence;
+}
+
+int main(void) {
+    // Inicjalizacja UART na 19200 baud
+    uart_init(19200);
+
+    // Konfiguracja pinów RGB jako wyjścia (D3, D5, D6)
+    DDRD |= (1 << DDD3) | (1 << DDD5) | (1 << DDD6);
+
+    // Inicjalizacja ADC (Preskaler 128, odniesienie AVCC)
+    ADCSRA |= (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);
+    ADMUX |= (1 << REFS0);
+
+    // Konfiguracja Timer0 i Timer2 pod sprzętowy PWM dla diody RGB
+    TCCR0A = (1 << COM0A1) | (1 << COM0B1) | (1 << WGM01) | (1 << WGM00);
+    TCCR0B = (1 << CS01) | (1 << CS00);
+    TCCR2A = (1 << COM2B1) | (1 << WGM21) | (1 << WGM20);
+    TCCR2B = (1 << CS22);
+
+    while (1) {
+        // 1. Pomiar ADC (Potencjometr)
+        ADCSRA |= (1 << ADSC);
+        while (ADCSRA & (1 << ADSC));
+        uint16_t adc_val = ADC;
+        float napiecie = adc_val * (5.0f / 1023.0f);
+
+        // 2. Test magistrali 1-Wire (DS18B20)
+        uint8_t czujnik_obecny = onewire_reset();
+
+        // 3. Logika kontrolna systemu (Dioda RGB sterowana potencjometrem)
+        if (adc_val < 341) {
+            OCR2B = 255; OCR0B = 0; OCR0A = 0;     // Czerwony stan alarmowy / niski
+        } else if (adc_val >= 341 && adc_val < 682) {
+            OCR2B = 0; OCR0B = 255; OCR0A = 0;     // Zielony stan normalny
+        } else {
+            OCR2B = 0; OCR0B = 0; OCR0A = 255;     // Niebieski stan wysoki
+        }
+
+        // 4. Wysyłanie pełnego raportu przez UART do Serial Monitora
+        uart_print_string("--- RAPORT SYSTEMU ---\n");
+        uart_print_string("Napiecie ADC: ");
+        uart_print_float(napiecie);
+        uart_print_string(" V\n");
+
+        uart_print_string("Status 1-Wire (DS18B20): ");
+        if (czujnik_obecny) {
+            uart_print_string("OK (Polaczono)\n");
+        } else {
+            uart_print_string("BLAD (Brak czujnika)\n");
+        }
+        uart_print_string("----------------------\n\n");
+
+        // Odstęp między raportami (500 ms), żeby nie zapchać bufora UART
+        _delay_ms(500);
+    }
+    return 0;
+}
