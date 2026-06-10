@@ -1,0 +1,46 @@
+#include <avr/io.h>
+#include <util/delay.h>
+#include <stdlib.h>
+
+// Inicjalizacja transmisji szeregowej
+void uart_init(unsigned int baudrate) {
+    unsigned int ubrr = F_CPU / 16 / baudrate - 1;
+    UBRR0H = (unsigned char)(ubrr >> 8);
+    UBRR0L = (unsigned char)ubrr;
+    UCSR0B = (1 << RXEN0) | (1 << TXEN0);   // Włączenie nadajnika i odbiornika
+    UCSR0C = (1 << USBS0) | (3 << UCSZ00);  // Format ramki: 8N1
+}
+
+// Funkcja wysyłająca liczbę zmiennoprzecinkową przez UART
+void uart_print_float(float value) {
+    char buffer[10];
+    dtostrf(value, 4, 2, buffer); // Konwersja float na string (szerokość 4, 2 miejsca po przecinku)
+    for (int i = 0; buffer[i] != '\0'; i++) {
+        while (!(UCSR0A & (1 << UDRE0))); // Czekaj na wolny bufor nadawczy
+        UDR0 = buffer[i];
+    }
+    // Wysłanie znaku nowej linii (wymagane dla Serial Plotter)
+    while (!(UCSR0A & (1 << UDRE0)));
+    UDR0 = '\n';
+}
+
+int main(void) {
+    uart_init(19200); // Uruchomienie UART na 19200 baud
+
+    // Inicjalizacja przetwornika ADC
+    ADCSRA |= (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // Włącz ADC, preskaler 128
+    ADMUX |= (1 << REFS0); // Odniesienie do AVCC (5V), domyślnie wybrane wejście ADC0 (pin A0)
+
+    while (1) {
+        ADCSRA |= (1 << ADSC);          // Start pojedynczej konwersji
+        while (ADCSRA & (1 << ADSC));   // Oczekiwanie na zakończenie pomiaru
+        
+        uint16_t adc_val = ADC;         // Odczyt wartości z rejestru (0 - 1023)
+        float napiecie = adc_val * (5.0f / 1023.0f); // Przeliczenie na wolty
+
+        uart_print_float(napiecie);     // Wysyłanie wyniku
+
+        _delay_ms(200);                 // Próbkowanie co 200 ms
+    }
+    return 0;
+}
