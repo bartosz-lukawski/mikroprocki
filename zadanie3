@@ -1,0 +1,46 @@
+#include <avr/io.h>
+#include <util/delay.h>
+
+int main(void) {
+    // Konfiguracja pinów D3, D5, D6 jako wyjścia
+    DDRD |= (1 << DDD3) | (1 << DDD5) | (1 << DDD6);
+
+    // Konfiguracja Timer0: Fast PWM, tryb nieodwracalny (Clear on Compare Match)
+    TCCR0A = (1 << COM0A1) | (1 << COM0B1) | (1 << WGM01) | (1 << WGM00);
+    TCCR0B = (1 << CS01) | (1 << CS00); // Preskaler 64
+
+    // Konfiguracja Timer2: Fast PWM, tryb nieodwracalny
+    TCCR2A = (1 << COM2B1) | (1 << WGM21) | (1 << WGM20);
+    TCCR2B = (1 << CS22); // Preskaler 64 (w Timer2 bit CS22 oznacza preskaler 64)
+
+    // Wyczyszczenie wypełnień początkowych (diody zgaszone)
+    OCR2B = 0; // Czerwony (D3)
+    OCR0B = 0; // Zielony (D5)
+    OCR0A = 0; // Niebieski (D6)
+
+    while (1) {
+        // Płynne rozjaśnianie koloru czerwonego
+        for (uint8_t i = 0; i < 255; i++) {
+            OCR2B = i;
+            _delay_ms(5);
+        }
+        // Płynne wygaszanie czerwonego, rozjaśnianie zielonego
+        for (uint8_t i = 0; i < 255; i++) {
+            OCR2B = 255 - i;
+            OCR0B = i;
+            _delay_ms(5);
+        }
+        // Płynne wygaszanie zielonego, rozjaśnianie niebieskiego
+        for (uint8_t i = 0; i < 255; i++) {
+            OCR0B = 255 - i;
+            OCR0A = i;
+            _delay_ms(5);
+        }
+        // Płynne wygaszanie niebieskiego
+        for (uint8_t i = 0; i < 255; i++) {
+            OCR0A = 255 - i;
+            _delay_ms(5);
+        }
+    }
+    return 0;
+}
