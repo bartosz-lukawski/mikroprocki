@@ -1,52 +1,44 @@
-#include <Wire.h> // Biblioteka do obsługi komunikacji I2C (wbudowana w Arduino)
-#include <LiquidCrystal_I2C.h> // Nowa biblioteka do ekranu I2C
+#include <Arduino.h> // Wymagane przy używaniu funkcji main() w środowisku Arduino
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-// Tworzymy obiekt ekranu I2C.
-// 0x27 to standardowy adres fabryczny ekranu, a 16 i 2 to jego wymiary.
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-// Czujnik temperatury bez zmian na pinie D2
 #define PIN_CZUJNIKA 2
 
 OneWire jednaLinia(PIN_CZUJNIKA);
 DallasTemperature czujnik(&jednaLinia);
 
-void setup() {
-  // Uruchamiamy ekran I2C
+int main() {
+  // 1. Inicjalizacja rdzenia Arduino (BARDZO WAŻNE przy funkcji main!)
+  init(); 
+  
+  // 2. Odpowiednik sekcji setup()
   lcd.init();
-  
-  // Włączamy światełko z tyłu ekranu (podświetlenie)
   lcd.backlight();
-  
-  // Uruchamiamy czujnik temperatury
   czujnik.begin();
-  
-  // Uruchamiamy komunikację z komputerem
   Serial.begin(9600);
   
-  // Komunikat startowy
   lcd.print("Termometr start");
   delay(1000); 
   lcd.clear(); 
-}
 
-void loop() {
-  // Prosimy czujnik o zmierzenie temperatury
-  czujnik.requestTemperatures();
-  
-  // Odczytujemy temperaturę
-  float temperatura = czujnik.getTempCByIndex(0);
-  
-  // --- WYŚWIETLANIE NA LCD ---
-  lcd.setCursor(0, 0); 
-  lcd.print("Temp: "); 
-  lcd.print(temperatura); 
-  lcd.print(" C"); 
-  
-  // --- WYSYŁANIE DO KOMPUTERA ---
-  Serial.println(temperatura);
-  
-  delay(1000);
+  // 3. Odpowiednik sekcji loop() – nieskończona pętla
+  while (true) {
+    czujnik.requestTemperatures();
+    float temperatura = czujnik.getTempCByIndex(0);
+    
+    lcd.setCursor(0, 0); 
+    lcd.print("Temp: "); 
+    lcd.print(temperatura); 
+    lcd.print(" C"); 
+    
+    Serial.println(temperatura);
+    
+    delay(1000);
+  }
+
+  return 0; // Standardowe zakończenie funkcji main
 }
