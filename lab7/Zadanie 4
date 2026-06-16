@@ -1,0 +1,146 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <IRremote.h>
+
+// --- KONFIGURACJA SPRZĘTU ---
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+#define PIN_CZUJNIKA 2            
+#define PIN_IR 7                  
+#define PIN_LED_CHLODZENIE 8      
+#define PIN_LED_DODATKOWA 9       
+#define PIN_FOTOREZYSTOR A0       // Fotorezystor podpięty do pinu analogowego A0
+
+// --- KODY PRZYCISKÓW Z PILOTA ---
+#define KOD_POWER 0x45
+#define KOD_PLUS  0x46
+#define KOD_MINUS 0x47
+#define KOD_DIODA 0x44
+#define KOD_PROG_PLUS  0x43       // Przycisk do podnoszenia progu światła (Strzałka w prawo)
+#define KOD_PROG_MINUS 0x40       // Przycisk do obniżania progu światła (Strzałka w lewo)
+
+// --- ZMIENNE SYSTEMOWE ---
+int tryb_pracy = 0;         
+float temp_zadana = 22.0;   
+int stan_dodatkowej_led = LOW; 
+
+// Zmienna pamiętająca próg jasności (skala od 0 do 1023, ustawiamy startowo na środek: 500)
+int prog_swiatla = 500;     
+
+OneWire jednaLinia(PIN_CZUJNIKA);
+DallasTemperature czujnik(&jednaLinia);
+
+int main() {
+  init(); // Inicjalizacja rdzenia Arduino (konieczna dla main)
+  
+  // Inicjalizacja urządzeń
+  lcd.init();
+  lcd.noBacklight(); 
+  czujnik.begin();
+  IrReceiver.begin(PIN_IR);
+  
+  pinMode(PIN_LED_CHLODZENIE, OUTPUT);
+  pinMode(PIN_LED_DODATKOWA, OUTPUT);
+  
+  digitalWrite(PIN_LED_CHLODZENIE, LOW);
+  digitalWrite(PIN_LED_DODATKOWA, LOW);
+
+  // Główna pętla programu
+  while (true) {
+    
+    // --- 1. OBSŁUGA PILOTA IR ---
+    if (IrReceiver.decode()) {
+      int odebrany_kod = IrReceiver.decodedIRData.command;
+      
+      // Przycisk zasilania (Power)
+      if (odebrany_kod == KOD_POWER) {
+        if (tryb_pracy == 0) {
+          lcd.backlight();
+          lcd.clear();
+          lcd.print("Eko-Klimatyzator");
+          delay(3000); 
+          lcd.clear();
+          tryb_pracy = 1;
+        } else {
+          lcd.clear();
+          lcd.print("Zakonczenie pracy");
+          delay(2000); 
+          lcd.clear();
+          lcd.noBacklight();
+          digitalWrite(PIN_LED_CHLODZENIE, LOW); 
+          tryb_pracy = 0;
+        }
+      }
+      
+      // Przyciski aktywne tylko, gdy urządzenie jest włączone
+      if (tryb_pracy == 1) {
+        if (odebrany_kod == KOD_PLUS) {
+          temp_zadana = temp_zadana + 1.0; 
+        }
+        if (odebrany_kod == KOD_MINUS) {
+          temp_zadana = temp_zadana - 1.0; 
+        }
+        if (odebrany_kod == KOD_DIODA) {
+          if (stan_dodatkowej_led == LOW) { stan_dodatkowej_led = HIGH; } 
+          else { stan_dodatkowej_led = LOW; }
+          digitalWrite(PIN_LED_DODATKOWA, stan_dodatkowej_led);
+        }
+        // Zmiana progu światła
+        if (odebrany_kod == KOD_PROG_PLUS) {
+          prog_swiatla = prog_swiatla + 50; // Trzeba więcej światła, by klima ruszyła
+        }
+        if (odebrany_kod == KOD_PROG_MINUS) {
+          prog_swiatla = prog_swiatla - 50; // Klima ruszy nawet przy mniejszym słońcu
+        }
+      }
+      
+      IrReceiver.resume(); 
+    }
+    
+    // --- 2. LOGIKA DZIAŁANIA KLIMATYZATORA (GDY JEST WŁĄCZONY) ---
+    if (tryb_pracy == 1) {
+      
+      // Odczyt aktualnej jasności z fotorezystora (wynik od 0 do 1023)
+      int jasnosc = analogRead(PIN_FOTOREZYSTOR);
+      
+      // WARUNEK EKOLOGICZNY: Czy słońce świeci mocniej niż nasz próg?
+      if (jasnosc > prog_swiatla) {
+        
+        // JEST SŁOŃCE -> Pracujemy normalnie
+        czujnik.requestTemperatures();
+        float temp_rzeczywista = czujnik.getTempCByIndex(0);
+        
+        // Wyświetlanie danych na LCD
+        lcd.setCursor(0, 0);
+        lcd.print("Real: "); lcd.print(temp_rzeczywista); lcd.print("C   "); 
+        
+        lcd.setCursor(0, 1);
+        lcd.print("Zad: "); lcd.print(temp_zadana); lcd.print("C P:"); lcd.print(prog_swiatla); lcd.print(" ");
+        
+        // Regulator temperatury (ON/OFF)
+        if (temp_rzeczywista > temp_zadana) {
+          digitalWrite(PIN_LED_CHLODZENIE, HIGH);
+        } else {
+          digitalWrite(PIN_LED_CHLODZENIE, LOW);
+        }
+        
+      } else {
+        // BRAK SŁOŃCE -> Blokada ekologiczna!
+        digitalWrite(PIN_LED_CHLODZENIE, LOW); // Wyłączamy diodę chłodzenia, oszczędzamy prąd
+        
+        // Wyświetlanie ostrzeżenia na LCD
+        lcd.setCursor(0, 0);
+        lcd.print("Brak slonca!    ");
+        lcd.setCursor(0, 1);
+        lcd.print("Luj:"); lcd.print(jasnosc); lcd.print(" < Prog:"); lcd.print(prog_swiatla); lcd.print("  ");
+      }
+    }
+    
+    delay(200); // Małe opóźnienie pętli while dla stabilności pomiarów
+  }
+
+  return 0;
+}
