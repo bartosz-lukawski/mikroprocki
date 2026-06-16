@@ -1,31 +1,28 @@
-#include <IRremote.h> // Włączamy instrukcję obsługi podczerwieni
+#include <Arduino.h>
+#include <IRremote.h>
 
-// Definiujemy, że nasz odbiornik podłączyliśmy do pinu D7
 #define PIN_ODBIORNIKA 7
 
-void setup() {
-  // Uruchamiamy komunikację z komputerem, aby oglądać kody na ekranie
-  Serial.begin(9600);
+int main() {
+  init(); // Inicjalizacja sprzętu mikrokontrolera
   
-  // Uruchamiamy odbiornik podczerwieni na wybranym pinie
+  Serial.begin(9600);
   IrReceiver.begin(PIN_ODBIORNIKA);
   
-  Serial.println("Odbiornik IR gotowy. Nacisnij cos na pilocie!");
-}
+  Serial.println("Odbiornik IR gotowy.");
 
-void loop() {
-  // Sprawdzamy, czy czujnik odebrał jakiś sygnał z pilota
-  if (IrReceiver.decode()) {
-    
-    // Pobieramy odebrany kod przycisku i wysyłamy go do komputera
-    // Używamy formatu HEX (szesnastkowego), bo tak najłatwiej czytać kody pilotów
-    Serial.print("Odebrano kod: ");
-    Serial.println(IrReceiver.decodedIRData.command, HEX);
-    
-    // Bardzo ważne: nakazujemy czujnikowi przygotować się na kolejny sygnał
-    IrReceiver.resume();
+  while (true) {
+    if (IrReceiver.decode()) {
+      // Pobieramy kod przycisku
+      int odebrany_kod = IrReceiver.decodedIRData.command;
+      
+      Serial.print("Odebrano kod: 0x");
+      Serial.println(odebrany_kod, HEX);
+      
+      IrReceiver.resume();
+    }
+    delay(100);
   }
-  
-  // Małe opóźnienie, żeby Arduino nie pracowało zbyt nerwowo
-  delay(100);
+
+  return 0;
 }
