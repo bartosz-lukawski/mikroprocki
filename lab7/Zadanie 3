@@ -1,0 +1,117 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <IRremote.h>
+
+// --- TWOJA KONFIGURACJA PINÓW ---
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+#define PIN_CZUJNIKA 2            
+#define PIN_IR 7                  
+#define PIN_LED_CHLODZENIE 8      
+#define PIN_LED_DODATKOWA 9       
+
+// --- KODY PRZYCISKÓW Z PILOTA ---
+#define KOD_POWER 0x45
+#define KOD_PLUS  0x46
+#define KOD_MINUS 0x47
+#define KOD_DIODA 0x44
+
+// --- ZMIENNE SYSTEMOWE ---
+int tryb_pracy = 0;         
+float temp_zadana = 22.0;   
+int stan_dodatkowej_led = LOW; 
+
+OneWire jednaLinia(PIN_CZUJNIKA);
+DallasTemperature czujnik(&jednaLinia);
+
+int main() {
+  init(); // Inicjalizacja sprzętu mikrokontrolera (m.in. liczników czasu delay)
+  
+  // Konfiguracja urządzeń (dawne setup)
+  lcd.init();
+  lcd.noBacklight(); 
+  czujnik.begin();
+  IrReceiver.begin(PIN_IR);
+  
+  pinMode(PIN_LED_CHLODZENIE, OUTPUT);
+  pinMode(PIN_LED_DODATKOWA, OUTPUT);
+  
+  digitalWrite(PIN_LED_CHLODZENIE, LOW);
+  digitalWrite(PIN_LED_DODATKOWA, LOW);
+
+  // Główna pętla programu (dawne loop)
+  while (true) {
+    
+    // --- OBSŁUGA PILOTA IR ---
+    if (IrReceiver.decode()) {
+      int odebrany_kod = IrReceiver.decodedIRData.command;
+      
+      if (odebrany_kod == KOD_POWER) {
+        if (tryb_pracy == 0) {
+          lcd.backlight();
+          lcd.clear();
+          lcd.print("Wlaczanie...");
+          delay(3000); 
+          lcd.clear();
+          tryb_pracy = 1;
+        } else {
+          lcd.clear();
+          lcd.print("Zakonczenie pracy");
+          delay(2000); 
+          lcd.clear();
+          lcd.noBacklight();
+          digitalWrite(PIN_LED_CHLODZENIE, LOW); 
+          tryb_pracy = 0;
+        }
+      }
+      
+      if (tryb_pracy == 1) {
+        if (odebrany_kod == KOD_PLUS) {
+          temp_zadana = temp_zadana + 1.0; 
+        }
+        if (odebrany_kod == KOD_MINUS) {
+          temp_zadana = temp_zadana - 1.0; 
+        }
+        if (odebrany_kod == KOD_DIODA) {
+          if (stan_dodatkowej_led == LOW) {
+            stan_dodatkowej_led = HIGH;
+          } else {
+            stan_dodatkowej_led = LOW;
+          }
+          digitalWrite(PIN_LED_DODATKOWA, stan_dodatkowej_led);
+        }
+      }
+      
+      IrReceiver.resume(); 
+    }
+    
+    // --- PRACA SYSTEMU KLIMATYZACJI ---
+    if (tryb_pracy == 1) {
+      czujnik.requestTemperatures();
+      float temp_rzeczywista = czujnik.getTempCByIndex(0);
+      
+      lcd.setCursor(0, 0);
+      lcd.print("Realna: ");
+      lcd.print(temp_rzeczywista);
+      lcd.print("C ");
+      
+      lcd.setCursor(0, 1);
+      lcd.print("Zadana: ");
+      lcd.print(temp_zadana);
+      lcd.print("C ");
+      
+      if (temp_rzeczywista > temp_zadana) {
+        digitalWrite(PIN_LED_CHLODZENIE, HIGH);
+      } else {
+        digitalWrite(PIN_LED_CHLODZENIE, LOW);
+      }
+    }
+    
+    delay(200); // Mała przerwa w pętli while
+  }
+
+  return 0;
+}
