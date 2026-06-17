@@ -4,8 +4,9 @@
 #define PIN_ODBIORNIKA 7
 
 int main() {
-  init(); // Inicjalizacja sprzętu mikrokontrolera
-  
+
+// Inicjalizacjs
+  init();
   Serial.begin(9600);
   IrReceiver.begin(PIN_ODBIORNIKA);
   
@@ -13,7 +14,7 @@ int main() {
 
   while (true) {
     if (IrReceiver.decode()) {
-      // Pobieramy kod przycisku
+      // Pobranie kodu przycisku
       int odebrany_kod = IrReceiver.decodedIRData.command;
       
       Serial.print("Odebrano kod: 0x");
