@@ -5,21 +5,19 @@
 #include <DallasTemperature.h>
 #include <IRremote.h>
 
-// --- TWOJA KONFIGURACJA PINÓW ---
+// Konfiguracja
 LiquidCrystal_I2C lcd(0x27, 16, 2);
-
 #define PIN_CZUJNIKA 2            
 #define PIN_IR 7                  
 #define PIN_LED_CHLODZENIE 8      
 #define PIN_LED_DODATKOWA 9       
 
-// --- KODY PRZYCISKÓW Z PILOTA ---
+// Kody przycisków 
 #define KOD_POWER 0x45
 #define KOD_PLUS  0x46
 #define KOD_MINUS 0x47
 #define KOD_DIODA 0x44
 
-// --- ZMIENNE SYSTEMOWE ---
 int tryb_pracy = 0;         
 float temp_zadana = 22.0;   
 int stan_dodatkowej_led = LOW; 
@@ -28,9 +26,9 @@ OneWire jednaLinia(PIN_CZUJNIKA);
 DallasTemperature czujnik(&jednaLinia);
 
 int main() {
-  init(); // Inicjalizacja sprzętu mikrokontrolera (m.in. liczników czasu delay)
+// Inicjalizacja 
+  init(); 
   
-  // Konfiguracja urządzeń (dawne setup)
   lcd.init();
   lcd.noBacklight(); 
   czujnik.begin();
@@ -42,10 +40,9 @@ int main() {
   digitalWrite(PIN_LED_CHLODZENIE, LOW);
   digitalWrite(PIN_LED_DODATKOWA, LOW);
 
-  // Główna pętla programu (dawne loop)
   while (true) {
     
-    // --- OBSŁUGA PILOTA IR ---
+    // Obsługa pilota
     if (IrReceiver.decode()) {
       int odebrany_kod = IrReceiver.decodedIRData.command;
       
@@ -88,7 +85,7 @@ int main() {
       IrReceiver.resume(); 
     }
     
-    // --- PRACA SYSTEMU KLIMATYZACJI ---
+    // Praca klimatyzatorap
     if (tryb_pracy == 1) {
       czujnik.requestTemperatures();
       float temp_rzeczywista = czujnik.getTempCByIndex(0);
@@ -110,7 +107,7 @@ int main() {
       }
     }
     
-    delay(200); // Mała przerwa w pętli while
+    delay(200);
   }
 
   return 0;
